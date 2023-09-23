@@ -26,11 +26,17 @@ const client = new MongoClient(uri, {
 
 async function run() {
     const serviceCollection = client.db("deepEtch").collection("services");
+    const testimonialCollection = client.db("deepEtch").collection("testimonial");
     try {
 
 
         app.get("/all-service", async (req, res) => {
             const result = await serviceCollection.find({}).toArray();
+            res.send(result)
+        })
+
+        app.get("/client-testimonial", async(req,res)=>{
+            const result = await testimonialCollection.find({}).toArray();
             res.send(result)
         })
         
