@@ -117,7 +117,7 @@ async function run() {
               const token = jwt.sign({ email, role: user.role }, process.env.ACCESS_TOKEN);
           
               // Return the token and user details
-              res.status(200).json({ token, email, name: user.name, role: user.role, photo: user.photo, clientCompany, clientPosition, clientCountry });
+              res.status(200).json({ token, email, name: user.name, role: user.role, photo: user.photo, clientCompany: user.clientCompany, clientPosition: user.clientPosition, clientCountry:user.clientCountry });
             } catch (error) {
               console.error('Login error:', error);
               res.status(500).json({ message: 'Failed to login' });
@@ -132,7 +132,7 @@ async function run() {
               // Fetch the user details
               const user = await usersCollection.findOne({ email });
               if (!user) {
-                return res.status(404).json({ message: 'User not found' });
+                return res.json({user: false});
               }
           
               // Return the user details
