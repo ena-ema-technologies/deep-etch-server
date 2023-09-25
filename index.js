@@ -28,6 +28,17 @@ const dropbox = new Dropbox({
 });
 
 // Function to create a shared link to a file
+// async function createSharedLink(filePath) {
+//   try {
+//     const response = await dropbox.sharingCreateSharedLinkWithSettings({ path: filePath });
+//     return response.result.url;
+//   } catch (error) {
+//     console.error('Error creating shared link:', error);
+//     throw error;
+//   }
+// }
+
+
 async function createSharedLink(filePath) {
   try {
     const response = await dropbox.sharingCreateSharedLinkWithSettings({ path: filePath });
@@ -67,7 +78,8 @@ const client = new MongoClient(uri, {
 async function run() {
   const serviceCollection = client.db("deepEtch").collection("services");
   const testimonialCollection = client.db("deepEtch").collection("testimonial");
-  const usersCollection = client.db("deepEtch").collection("users")
+  const usersCollection = client.db("deepEtch").collection("users");
+  const quoteCollection = client.db("deepEtch").collection("customerRequest");
   try {
 
 
@@ -169,27 +181,60 @@ async function run() {
     });
 
 
-    app.post('/upload', upload.single('photo'), async (req, res) => {
+    // app.post('/upload', upload.single('photo'), async (req, res) => {
+    //   try {
+    //     // Upload the photo to Dropbox
+    //     const fileContent = require('fs').readFileSync(req.file.path);
+    //     const response = await dropbox.filesUpload({ path: `/photos/${req.file.originalname}`, contents: fileContent });
+
+    //     // Create a shared link to the uploaded file
+    //     const sharedLink = await createSharedLink(response.result.path_display);
+
+    //     // Clean up: Delete the temporary file on the server
+    //     require('fs').unlinkSync(req.file.path);
+
+    //     // Send the shared link as the response
+    //     res.status(200).json({ url: sharedLink });
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send('Error uploading photo to Dropbox');
+    //   }
+    // });
+
+
+    
+
+
+    app.post("/get-quote-request", verifyToken, async(req,res)=>{
+      const newRequest = req.body;
+      const result = await quoteCollection.insertOne(newRequest);
+      res.send(result);
+    })
+
+    app.post('/upload', upload.array('photos', 10), async (req, res) => {
       try {
-        // Upload the photo to Dropbox
-        const fileContent = require('fs').readFileSync(req.file.path);
-        const response = await dropbox.filesUpload({ path: `/photos/${req.file.originalname}`, contents: fileContent });
-
-        // Create a shared link to the uploaded file
-        const sharedLink = await createSharedLink(response.result.path_display);
-
-        // Clean up: Delete the temporary file on the server
-        require('fs').unlinkSync(req.file.path);
-
-        // Send the shared link as the response
-        res.status(200).json({ url: sharedLink });
+        const uploadedFiles = req.files;
+        const sharedLinks = [];
+    
+        for (let i = 0; i < uploadedFiles.length; i++) {
+          const file = uploadedFiles[i];
+          const fileContent = require('fs').readFileSync(file.path);
+          const response = await dropbox.filesUpload({ path: `/photos/${file.originalname}`, contents: fileContent });
+    
+          const sharedLink = await createSharedLink(response.result.path_display);
+          sharedLinks.push(sharedLink);
+    
+          // Clean up: Delete the temporary file on the server
+          require('fs').unlinkSync(file.path);
+        }
+    
+        // Send the shared links as the response
+        res.status(200).json({ links: sharedLinks });
       } catch (error) {
         console.error(error);
-        res.status(500).send('Error uploading photo to Dropbox');
+        res.status(500).send('Error uploading photos to Dropbox');
       }
     });
-
-
 
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
