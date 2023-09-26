@@ -71,6 +71,7 @@ async function run() {
   const usersCollection = client.db("deepEtch").collection("users");
   const quoteCollection = client.db("deepEtch").collection("customerRequest");
   const servicePricing = client.db("deepEtch").collection("servicePricing");
+  const trialRequestCollection = client.db("deepEtch").collection("trialRequest");
   try {
 
 
@@ -177,6 +178,20 @@ async function run() {
       const newRequest = req.body;
       const result = await quoteCollection.insertOne(newRequest);
       res.send(result);
+    })
+
+    app.post("/free-trial-request", verifyToken, async (req, res) => {
+      const newRequest = req.body;
+      const email = newRequest.email;
+      const query = {email: email};
+      const existsReq = await trialRequestCollection.findOne(query);
+      if(existsReq){
+        res.json({ message: 'Your free trial quota has been finished! You can try our premium package.' })
+      }else{
+        const result = await trialRequestCollection.insertOne(newRequest);
+        res.send(result);
+      }
+      
     })
 
 
