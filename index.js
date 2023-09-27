@@ -8,7 +8,7 @@ const Dropbox = require('dropbox').Dropbox;
 const fetch = require('isomorphic-fetch');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
-const { MongoClient, ServerApiVersion } = require('mongodb');
+const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { log } = require('console');
 const uri = `mongodb+srv://${process.env.DB_User}:${process.env.DB_Pass}@cluster0.hc5ickt.mongodb.net/?retryWrites=true&w=majority`;
 
@@ -80,8 +80,16 @@ async function run() {
       res.send(result)
     })
 
+
+    // Testimonial APIs
     app.get("/client-testimonial", async (req, res) => {
       const result = await testimonialCollection.find({}).toArray();
+      res.send(result)
+    })
+
+    app.post("/new-client-testimonial", verifyToken, async(req,res)=>{
+      const  newTestimonial = req.body;
+      const result = await testimonialCollection.insertOne(newTestimonial);
       res.send(result)
     })
 
@@ -225,6 +233,77 @@ async function run() {
     app.get("/service-pricing", async (req, res) => {
       const result = await servicePricing.find({}).toArray();
       res.send(result)
+    })
+
+
+    // Admin Api
+
+    app.patch("/users/admin/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const userUpdate = {
+        $set: {
+          role: "admin"
+        }
+      };
+      const result = await usersCollection.updateOne(filter, userUpdate);
+      res.send(result);
+    })
+
+    app.get("/users/admin/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      const result = { admin: user?.role === "admin" }
+      res.send(result);
+    })
+
+    // Managers APIs
+    app.patch("/users/manager/:id", verifyToken, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) }
+      const userUpdate = {
+        $set: {
+          role: "manager"
+        }
+      };
+      const result = await usersCollection.updateOne(filter, userUpdate);
+      res.send(result);
+    })
+
+    app.get("/users/manager/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const query = { email: email };
+      const user = await usersCollection.findOne(query);
+
+      const result = { manager: user?.role === "manager" }
+      res.send(result);
+    })
+
+    // Get orders
+
+    app.get("/user-orders", verifyToken, async(req,res)=>{
+      const email = req.query.email;
+      const filter = {email: email};
+      if(email){
+        const result = await quoteCollection.find(filter).toArray();
+        return res.send(result)
+      }else{
+        return res.send([])
+      }
+    })
+
+    // Get trials
+    app.get("/user-trial-request", verifyToken, async(req,res)=>{
+      const email = req.query.email;
+      const filter = {email: email};
+      if(email){
+        const result = await trialRequestCollection.find(filter).toArray();
+        return res.send(result)
+      }else{
+        return res.send([])
+      }
     })
 
     // Connect the client to the server	(optional starting in v4.7)
