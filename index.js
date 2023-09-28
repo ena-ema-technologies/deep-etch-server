@@ -10,23 +10,56 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 const { log } = require('console');
+const { default: axios } = require('axios');
 const uri = `mongodb+srv://${process.env.DB_User}:${process.env.DB_Pass}@cluster0.hc5ickt.mongodb.net/?retryWrites=true&w=majority`;
 
 
 app.use(cors());
 app.use(express.json());
 
-
+// let clientId = process.env.DROPBOX_CLIENT_ID;
+// let clientSecret = process.env.DROPBOX_CLIENT_SECRET;
+let accessToken = process.env.DROPBOX_ACCESS_TOKEN;
+// let accessTokenExpirationTime = null;
 
 const upload = multer({ dest: 'uploads/' });
 
 // Replace these with your Dropbox API credentials
 const dropbox = new Dropbox({
-  accessToken: process.env.DROPBOX_ACCESS_TOKEN,
+  accessToken: accessToken,
   clientId: process.env.DROPBOX_CLIENT_ID,
   clientSecret: process.env.DROPBOX_CLIENT_SECRET,
 });
 
+
+// // Function to refresh the Dropbox access token
+// async function refreshAccessToken() {
+//   try {
+//     const response = await axios.post('https://api.dropboxapi.com/oauth2/token', null, {
+//       params: {
+//         grant_type: 'refresh_token',
+//         refresh_token: process.env.DROPBOX_ACCESS_TOKEN, // You need to store and use the refresh token from the initial OAuth flow
+//       },
+//       auth: {
+//         username: clientId,
+//         password: clientSecret,
+//       },
+//     });
+
+//     if (response.status === 200) {
+//       const newAccessToken = response.data.access_token;
+//       console.log('New access token obtained:', newAccessToken);
+//       // Update the DROPBOX_ACCESS_TOKEN variable with the new access token
+//       accessToken = newAccessToken;
+//       // Update the Dropbox SDK instance with the new access token
+//       dropbox.setAccessToken(newAccessToken);
+//     } else {
+//       console.error('Error refreshing access token:', response.statusText);
+//     }
+//   } catch (error) {
+//     console.error('Error refreshing access token:', error.message);
+//   }
+// }
 
 
 async function createSharedLink(filePath) {
@@ -128,7 +161,7 @@ async function run() {
             status: newData.status
           }
         }
-        const result = await testimonialCollection.updateOne(filter,updateDoc);
+        const result = await testimonialCollection.updateOne(filter, updateDoc);
         return res.send(result)
       }
     })
@@ -138,7 +171,7 @@ async function run() {
       const filter = { _id: new ObjectId(id) };
       const result = await testimonialCollection.deleteOne(filter);
       res.send(result)
-      
+
     })
 
 
@@ -229,9 +262,9 @@ async function run() {
     });
 
     // user delete
-    app.delete("/delete-user/:id", verifyToken, verifyAdmin, async(req,res)=>{
+    app.delete("/delete-user/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
-      const filter = {_id: new ObjectId(id)};
+      const filter = { _id: new ObjectId(id) };
       const result = await usersCollection.deleteOne(filter);
       res.send(result)
     })
@@ -284,6 +317,33 @@ async function run() {
 
     // Upload photos in Dropbox and send links
     app.post('/upload', upload.array('photos', 10), async (req, res) => {
+      // if (!accessTokenExpirationTime || Date.now() >= accessTokenExpirationTime) {
+      //   await refreshAccessToken();
+      // }else{
+      //   try {
+      //     const uploadedFiles = req.files;
+      //     const sharedLinks = [];
+
+      //     for (let i = 0; i < uploadedFiles.length; i++) {
+      //       const file = uploadedFiles[i];
+      //       const fileContent = require('fs').readFileSync(file.path);
+      //       const response = await dropbox.filesUpload({ path: `/photos/${file.originalname}`, contents: fileContent });
+
+      //       const sharedLink = await createSharedLink(response.result.path_display);
+      //       sharedLinks.push(sharedLink);
+
+      //       // Clean up: Delete the temporary file on the server
+      //       require('fs').unlinkSync(file.path);
+      //     }
+
+      //     // Send the shared links as the response
+      //     res.status(200).json({ links: sharedLinks });
+      //   } catch (error) {
+      //     console.error(error);
+      //     res.status(500).send('Error uploading photos to Dropbox');
+      //   }
+      // }
+
       try {
         const uploadedFiles = req.files;
         const sharedLinks = [];
@@ -306,6 +366,7 @@ async function run() {
         console.error(error);
         res.status(500).send('Error uploading photos to Dropbox');
       }
+
     });
 
 
@@ -339,7 +400,7 @@ async function run() {
       res.send(result);
     })
 
-    app.get("/all-users" , verifyToken, verifyAdmin, async(req,res)=>{
+    app.get("/all-users", verifyToken, verifyAdmin, async (req, res) => {
       const result = await usersCollection.find({}).toArray();
       res.send(result);
     })
