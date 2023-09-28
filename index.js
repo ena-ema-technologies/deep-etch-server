@@ -78,7 +78,7 @@ async function run() {
     //Verify Admin
 
     const verifyAdmin = async (req, res, next) => {
-      const {email} = req.user;
+      const { email } = req.user;
       const query = { email: email }
       const result = await usersCollection.findOne(query)
       if (result?.role !== "admin") {
@@ -90,7 +90,7 @@ async function run() {
     //Verify Manager
 
     const verifyManager = async (req, res, next) => {
-      const {email} = req.user;
+      const { email } = req.user;
       const query = { email: email }
       const result = await usersCollection.findOne(query)
       if (result?.role !== "manager") {
@@ -115,6 +115,30 @@ async function run() {
       const newTestimonial = req.body;
       const result = await testimonialCollection.insertOne(newTestimonial);
       res.send(result)
+    })
+
+    app.patch("/new-testimonial-update/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const existsReview = await testimonialCollection.findOne(filter);
+      if (existsReview) {
+        const newData = req.body;
+        const updateDoc = {
+          $set: {
+            status: newData.status
+          }
+        }
+        const result = await testimonialCollection.updateOne(filter,updateDoc);
+        return res.send(result)
+      }
+    })
+
+    app.delete("/delete-testimonial/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const result = await testimonialCollection.deleteOne(filter);
+      res.send(result)
+      
     })
 
 
@@ -204,6 +228,14 @@ async function run() {
       }
     });
 
+    // user delete
+    app.delete("/delete-user/:id", verifyToken, verifyAdmin, async(req,res)=>{
+      const id = req.params.id;
+      const filter = {_id: new ObjectId(id)};
+      const result = await usersCollection.deleteOne(filter);
+      res.send(result)
+    })
+
     // Store user quote request
 
     app.post("/get-quote-request", verifyToken, async (req, res) => {
@@ -227,27 +259,27 @@ async function run() {
 
     })
 
-  
-      app.patch("/update-trials-results/:id", verifyToken, verifyManager, async(req,res)=>{
-        const id = req.params.id;
-        const filter ={_id: new ObjectId(id)};
-        const existsReq = await trialRequestCollection.findOne(filter);
-        if(existsReq){
-          const existsResult = existsReq?.result || [];
-          const newResult = req.body;
-          const updateResult = {
-            $set:{
-              result: [...existsResult, newResult],
-              status: "Complete"
-            }
+
+    app.patch("/update-trials-results/:id", verifyToken, verifyManager, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const existsReq = await trialRequestCollection.findOne(filter);
+      if (existsReq) {
+        const existsResult = existsReq?.result || [];
+        const newResult = req.body;
+        const updateResult = {
+          $set: {
+            result: [...existsResult, newResult],
+            status: "Complete"
           }
-          const result = await trialRequestCollection.updateOne(filter, updateResult);
-          return res.send(result);
         }
-        else{
-          return res.json({message: "Failed to update"})
-        }
-      })
+        const result = await trialRequestCollection.updateOne(filter, updateResult);
+        return res.send(result);
+      }
+      else {
+        return res.json({ message: "Failed to update" })
+      }
+    })
 
 
     // Upload photos in Dropbox and send links
@@ -285,12 +317,13 @@ async function run() {
 
     // Admin Api
 
-    app.patch("/users/admin/:id", verifyToken, async (req, res) => {
+    app.patch("/users/admin/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
+      const newRole = req.body;
       const userUpdate = {
         $set: {
-          role: "admin"
+          role: newRole.role
         }
       };
       const result = await usersCollection.updateOne(filter, userUpdate);
@@ -306,13 +339,19 @@ async function run() {
       res.send(result);
     })
 
+    app.get("/all-users" , verifyToken, verifyAdmin, async(req,res)=>{
+      const result = await usersCollection.find({}).toArray();
+      res.send(result);
+    })
+
     // Managers APIs
-    app.patch("/users/manager/:id", verifyToken, async (req, res) => {
+    app.patch("/users/manager/:id", verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
       const filter = { _id: new ObjectId(id) }
+      const newRole = req.body;
       const userUpdate = {
         $set: {
-          role: "manager"
+          role: newRole.role
         }
       };
       const result = await usersCollection.updateOne(filter, userUpdate);
@@ -340,6 +379,52 @@ async function run() {
         return res.send([])
       }
     })
+
+    app.get("/all-user-orders", verifyToken, verifyAdmin, async (req, res) => {
+
+      const result = await quoteCollection.find({}).toArray();
+      return res.send(result)
+
+    })
+
+    app.patch("/orders-update-status/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const existsReq = await quoteCollection.findOne(filter);
+      if (existsReq) {
+        const newResult = req.body;
+        const updateResult = {
+          $set: {
+            status: newResult.status
+          }
+        }
+        const result = await quoteCollection.updateOne(filter, updateResult);
+        return res.send(result);
+      }
+      else {
+        return res.json({ message: "Failed to update" })
+      }
+    })
+
+    app.patch("/payment-update-status/:id", verifyToken, verifyAdmin, async (req, res) => {
+      const id = req.params.id;
+      const filter = { _id: new ObjectId(id) };
+      const existsReq = await quoteCollection.findOne(filter);
+      if (existsReq) {
+        const newData = req.body;
+        const updateResult = {
+          $set: {
+            payment: newData.payment
+          }
+        }
+        const result = await quoteCollection.updateOne(filter, updateResult);
+        return res.send(result);
+      }
+      else {
+        return res.json({ message: "Failed to update" })
+      }
+    })
+
 
     // Get trials
     app.get("/user-trial-request", verifyToken, async (req, res) => {
