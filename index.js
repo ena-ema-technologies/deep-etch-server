@@ -75,6 +75,30 @@ async function run() {
   try {
 
 
+    //Verify Admin
+
+    const verifyAdmin = async (req, res, next) => {
+      const {email} = req.user;
+      const query = { email: email }
+      const result = await usersCollection.findOne(query)
+      if (result?.role !== "admin") {
+        return res.status(403).send({ error: true, message: "Forbidden access" })
+      }
+      next()
+    }
+
+    //Verify Manager
+
+    const verifyManager = async (req, res, next) => {
+      const {email} = req.user;
+      const query = { email: email }
+      const result = await usersCollection.findOne(query)
+      if (result?.role !== "manager") {
+        return res.status(403).send({ error: true, message: "Forbidden access" })
+      }
+      next()
+    }
+
     app.get("/all-service", async (req, res) => {
       const result = await serviceCollection.find({}).toArray();
       res.send(result)
@@ -87,8 +111,8 @@ async function run() {
       res.send(result)
     })
 
-    app.post("/new-client-testimonial", verifyToken, async(req,res)=>{
-      const  newTestimonial = req.body;
+    app.post("/new-client-testimonial", verifyToken, async (req, res) => {
+      const newTestimonial = req.body;
       const result = await testimonialCollection.insertOne(newTestimonial);
       res.send(result)
     })
@@ -188,19 +212,42 @@ async function run() {
       res.send(result);
     })
 
+    // Trial APIS
     app.post("/free-trial-request", verifyToken, async (req, res) => {
       const newRequest = req.body;
       const email = newRequest.email;
-      const query = {email: email};
+      const query = { email: email };
       const existsReq = await trialRequestCollection.findOne(query);
-      if(existsReq){
+      if (existsReq) {
         res.json({ message: 'Your free trial quota has been finished! You can try our premium package.' })
-      }else{
+      } else {
         const result = await trialRequestCollection.insertOne(newRequest);
         res.send(result);
       }
-      
+
     })
+
+  
+      app.patch("/update-trials-results/:id", verifyToken, verifyManager, async(req,res)=>{
+        const id = req.params.id;
+        const filter ={_id: new ObjectId(id)};
+        const existsReq = await trialRequestCollection.findOne(filter);
+        if(existsReq){
+          const existsResult = existsReq?.result || [];
+          const newResult = req.body;
+          const updateResult = {
+            $set:{
+              result: [...existsResult, newResult],
+              status: "Complete"
+            }
+          }
+          const result = await trialRequestCollection.updateOne(filter, updateResult);
+          return res.send(result);
+        }
+        else{
+          return res.json({message: "Failed to update"})
+        }
+      })
 
 
     // Upload photos in Dropbox and send links
@@ -283,27 +330,33 @@ async function run() {
 
     // Get orders
 
-    app.get("/user-orders", verifyToken, async(req,res)=>{
+    app.get("/user-orders", verifyToken, async (req, res) => {
       const email = req.query.email;
-      const filter = {email: email};
-      if(email){
+      const filter = { email: email };
+      if (email) {
         const result = await quoteCollection.find(filter).toArray();
         return res.send(result)
-      }else{
+      } else {
         return res.send([])
       }
     })
 
     // Get trials
-    app.get("/user-trial-request", verifyToken, async(req,res)=>{
+    app.get("/user-trial-request", verifyToken, async (req, res) => {
       const email = req.query.email;
-      const filter = {email: email};
-      if(email){
+      const filter = { email: email };
+      if (email) {
         const result = await trialRequestCollection.find(filter).toArray();
         return res.send(result)
-      }else{
+      } else {
         return res.send([])
       }
+    })
+
+    // Get all trials
+    app.get("/all-user-trial-request", verifyToken, verifyManager, async (req, res) => {
+      const result = await trialRequestCollection.find({}).toArray();
+      return res.send(result);
     })
 
     // Connect the client to the server	(optional starting in v4.7)
