@@ -105,6 +105,7 @@ async function run() {
   const quoteCollection = client.db("deepEtch").collection("customerRequest");
   const servicePricing = client.db("deepEtch").collection("servicePricing");
   const trialRequestCollection = client.db("deepEtch").collection("trialRequest");
+  const notificationCollection = client.db("deepEtch").collection("notification");
   try {
 
 
@@ -131,6 +132,17 @@ async function run() {
       }
       next()
     }
+
+    // Verify Common
+    // const verifyCommon = async (req, res, next) => {
+    //   const { email } = req.user;
+    //   const query = { email: email }
+    //   const result = await usersCollection.findOne(query)
+    //   if (result?.role !== "admin" || result?.role !== "manager") {
+    //     return res.status(403).send({ error: true, message: "Forbidden access" })
+    //   }
+    //   next()
+    // }
 
     app.get("/all-service", async (req, res) => {
       const result = await serviceCollection.find({}).toArray();
@@ -503,6 +515,68 @@ async function run() {
     app.get("/all-user-trial-request", verifyToken, verifyManager, async (req, res) => {
       const result = await trialRequestCollection.find({}).toArray();
       return res.send(result);
+    })
+
+    // Notification
+    app.patch("/update/notification/:email", verifyToken, async (req, res) => {
+      const email = req.params.email;
+      const newNotification = req.body;
+      const filter = { clientEmail: email };
+      const existsUser = await notificationCollection.findOne(filter);
+      if (existsUser) {
+        const existsResult = existsUser?.notification;
+        const updateNotification = {
+          message: newNotification.message,
+          date: newNotification.date,
+          id: existsResult.length + 1,
+          status: newNotification.status
+        }
+        const updateResult = {
+          $set: {
+            notification: [...existsResult, updateNotification],
+            status: "Unread"
+          }
+        }
+        const result = await notificationCollection.updateOne(filter, updateResult);
+        return res.send(result);
+      }else{
+        const newResult = {
+          clientEmail: email,
+          notification: [newNotification],
+          status: "Unread"
+        }
+        const result = await notificationCollection.insertOne(newResult);
+        return res.send(result)
+      }
+    })
+
+    app.get("/user-notification", verifyToken,async(req,res)=>{
+      const email = req.query.email;
+      const filter = {clientEmail: email};
+      const result = await notificationCollection.find(filter).toArray();
+      if(result){
+        return res.send(result);
+      }else{
+        return res.send([])
+      }
+    })
+    
+    app.patch("/notification/mark/read/:email",async(req,res)=>{
+      // const id = req.params.id;
+      const email = req.params.email;
+      const filter = {clientEmail: email};
+      const newBody = req.body;
+      const existsUser = await notificationCollection.findOne(filter);
+      if(existsUser){
+          const updateDoc = {
+            $set:{
+              status: newBody.status
+            }
+          }
+          const result = await notificationCollection.updateOne(filter,updateDoc);
+          res.send(result)
+
+      }
     })
 
     // Connect the client to the server	(optional starting in v4.7)
