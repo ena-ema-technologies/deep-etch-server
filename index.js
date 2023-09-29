@@ -19,17 +19,69 @@ app.use(express.json());
 
 // let clientId = process.env.DROPBOX_CLIENT_ID;
 // let clientSecret = process.env.DROPBOX_CLIENT_SECRET;
-let accessToken = process.env.DROPBOX_ACCESS_TOKEN;
+// let accessToken = null;
 // let accessTokenExpirationTime = null;
-
 const upload = multer({ dest: 'uploads/' });
 
+const DROPBOX_CLIENT_ID = process.env.DROPBOX_CLIENT_ID;;
+const DROPBOX_CLIENT_SECRET = process.env.DROPBOX_CLIENT_SECRET;
+let DROPBOX_ACCESS_TOKEN = process.env.DROPBOX_ACCESS_TOKEN;
+let DROPBOX_REFRESH_TOKEN = process.env.DROPBOX_REFRESH_TOKEN; 
+
+
+// Initialize Dropbox instance
+const dropbox = new Dropbox({ accessToken: DROPBOX_ACCESS_TOKEN });
+
+// Function to create a shared link to a file
+async function createSharedLink(filePath) {
+  try {
+    const response = await dropbox.sharingCreateSharedLinkWithSettings({ path: filePath });
+    return response.result.url;
+  } catch (error) {
+    console.error('Error creating shared link:', error);
+    throw error;
+  }
+}
+
+
+// Function to refresh the Dropbox access token
+async function refreshAccessToken() {
+  try {
+    const response = await axios.post('https://api.dropboxapi.com/oauth2/token', null, {
+      params: {
+        grant_type: 'refresh_token',
+        refresh_token: DROPBOX_REFRESH_TOKEN,
+      },
+      auth: {
+        username: DROPBOX_CLIENT_ID,
+        password: DROPBOX_CLIENT_SECRET,
+      },
+    });
+
+    if (response.status === 200) {
+      const newAccessToken = response.data.access_token;
+      console.log('New access token obtained:', newAccessToken);
+      // Update the DROPBOX_ACCESS_TOKEN variable with the new access token
+      DROPBOX_ACCESS_TOKEN = newAccessToken;
+      // Update the Dropbox SDK instance with the new access token
+      dropbox.setAccessToken(newAccessToken);
+    } else {
+      console.error('Error refreshing access token:', response.statusText);
+    }
+  } catch (error) {
+    console.error('Error refreshing access token:', error.message);
+  }
+}
+
+
+// const upload = multer({ dest: 'uploads/' });
+
 // Replace these with your Dropbox API credentials
-const dropbox = new Dropbox({
-  accessToken: accessToken,
-  clientId: process.env.DROPBOX_CLIENT_ID,
-  clientSecret: process.env.DROPBOX_CLIENT_SECRET,
-});
+// const dropbox = new Dropbox({
+//   accessToken: accessToken,
+//   clientId: process.env.DROPBOX_CLIENT_ID,
+//   clientSecret: process.env.DROPBOX_CLIENT_SECRET,
+// });
 
 
 // // Function to refresh the Dropbox access token
@@ -38,7 +90,7 @@ const dropbox = new Dropbox({
 //     const response = await axios.post('https://api.dropboxapi.com/oauth2/token', null, {
 //       params: {
 //         grant_type: 'refresh_token',
-//         refresh_token: process.env.DROPBOX_ACCESS_TOKEN, // You need to store and use the refresh token from the initial OAuth flow
+//         refresh_token: process.env.DROPBOX_REFRESH_TOKEN, // You need to store and use the refresh token from the initial OAuth flow
 //       },
 //       auth: {
 //         username: clientId,
@@ -327,59 +379,74 @@ async function run() {
     })
 
 
-    // Upload photos in Dropbox and send links
     app.post('/upload', upload.array('photos', 10), async (req, res) => {
-      // if (!accessTokenExpirationTime || Date.now() >= accessTokenExpirationTime) {
-      //   await refreshAccessToken();
-      // }else{
-      //   try {
-      //     const uploadedFiles = req.files;
-      //     const sharedLinks = [];
-
-      //     for (let i = 0; i < uploadedFiles.length; i++) {
-      //       const file = uploadedFiles[i];
-      //       const fileContent = require('fs').readFileSync(file.path);
-      //       const response = await dropbox.filesUpload({ path: `/photos/${file.originalname}`, contents: fileContent });
-
-      //       const sharedLink = await createSharedLink(response.result.path_display);
-      //       sharedLinks.push(sharedLink);
-
-      //       // Clean up: Delete the temporary file on the server
-      //       require('fs').unlinkSync(file.path);
-      //     }
-
-      //     // Send the shared links as the response
-      //     res.status(200).json({ links: sharedLinks });
-      //   } catch (error) {
-      //     console.error(error);
-      //     res.status(500).send('Error uploading photos to Dropbox');
-      //   }
-      // }
-
       try {
+        // Check if the access token is still valid, and refresh if needed
+        if (!DROPBOX_ACCESS_TOKEN) {
+          await refreshAccessToken();
+        }
+    
         const uploadedFiles = req.files;
         const sharedLinks = [];
-
+    
         for (let i = 0; i < uploadedFiles.length; i++) {
           const file = uploadedFiles[i];
           const fileContent = require('fs').readFileSync(file.path);
-          const response = await dropbox.filesUpload({ path: `/photos/${file.originalname}`, contents: fileContent });
-
-          const sharedLink = await createSharedLink(response.result.path_display);
+    
+          const headers = {
+            'Authorization': `Bearer ${DROPBOX_ACCESS_TOKEN}`,
+            'Content-Type': 'application/octet-stream',
+            'Dropbox-API-Arg': JSON.stringify({
+              path: `/photos/${file.originalname}`,
+            }),
+          };
+    
+          const response = await axios.post('https://content.dropboxapi.com/2/files/upload', fileContent, {
+            headers,
+          });
+    
+          const sharedLink = await createSharedLink(response.data.path_display);
           sharedLinks.push(sharedLink);
-
+    
           // Clean up: Delete the temporary file on the server
           require('fs').unlinkSync(file.path);
         }
-
+    
         // Send the shared links as the response
         res.status(200).json({ links: sharedLinks });
       } catch (error) {
         console.error(error);
         res.status(500).send('Error uploading photos to Dropbox');
       }
-
     });
+
+    // Upload photos in Dropbox and send links
+    // app.post('/upload', upload.array('photos', 10), async (req, res) => {
+
+    //   try {
+    //     const uploadedFiles = req.files;
+    //     const sharedLinks = [];
+
+    //     for (let i = 0; i < uploadedFiles.length; i++) {
+    //       const file = uploadedFiles[i];
+    //       const fileContent = require('fs').readFileSync(file.path);
+    //       const response = await dropbox.filesUpload({ path: `/photos/${file.originalname}`, contents: fileContent });
+
+    //       const sharedLink = await createSharedLink(response.result.path_display);
+    //       sharedLinks.push(sharedLink);
+
+    //       // Clean up: Delete the temporary file on the server
+    //       require('fs').unlinkSync(file.path);
+    //     }
+
+    //     // Send the shared links as the response
+    //     res.status(200).json({ links: sharedLinks });
+    //   } catch (error) {
+    //     console.error(error);
+    //     res.status(500).send('Error uploading photos to Dropbox');
+    //   }
+
+    // });
 
 
     app.get("/service-pricing", async (req, res) => {
@@ -446,7 +513,7 @@ async function run() {
       const email = req.query.email;
       const filter = { email: email };
       if (email) {
-        const result = await quoteCollection.find(filter).toArray();
+        const result = await quoteCollection.find(filter).sort({date: -1}).toArray();
         return res.send(result)
       } else {
         return res.send([])
@@ -455,7 +522,7 @@ async function run() {
 
     app.get("/all-user-orders", verifyToken, verifyAdmin, async (req, res) => {
 
-      const result = await quoteCollection.find({}).toArray();
+      const result = await quoteCollection.find({}).sort({date: -1}).toArray();
       return res.send(result)
 
     })
@@ -513,7 +580,7 @@ async function run() {
 
     // Get all trials
     app.get("/all-user-trial-request", verifyToken, verifyManager, async (req, res) => {
-      const result = await trialRequestCollection.find({}).toArray();
+      const result = await trialRequestCollection.find({}).sort({date: -1}).toArray();
       return res.send(result);
     })
 
@@ -553,7 +620,24 @@ async function run() {
     app.get("/user-notification", verifyToken,async(req,res)=>{
       const email = req.query.email;
       const filter = {clientEmail: email};
-      const result = await notificationCollection.find(filter).toArray();
+      // const result = await notificationCollection.find(filter).sort({date: -1}).toArray();
+      const result = await notificationCollection.aggregate([
+        { $match: filter },
+        { $unwind: "$notification" }, // Unwind the notification array
+        { $sort: { "notification.date": -1 } }, // Sort by the date within the notification objects
+        { $group: {
+          _id: "$_id",
+          clientEmail: { $first: "$clientEmail" },
+          notification: { $push: "$notification" },
+          status: { $first: "$status" }
+        }},
+        { $project: {
+          _id: 1,
+          clientEmail: 1,
+          notification: 1,
+          status: 1
+        }}
+      ]).toArray();
       if(result){
         return res.send(result);
       }else{
